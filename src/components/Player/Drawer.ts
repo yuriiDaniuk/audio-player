@@ -4,7 +4,6 @@ export interface IOptions {
   margin?: { top: number; bottom: number; left: number; right: number };
   height?: number;
   width?: number;
-  padding?: number;
 }
 
 class Drawer {
@@ -26,15 +25,10 @@ class Drawer {
       margin = { top: 0, bottom: 0, left: 0, right: 0 },
       height = this.parent.clientHeight,
       width = this.parent.clientWidth,
-      padding = 1,
     } = options;
 
     const domain = d3.extent(audioData);
 
-    const xScale = d3
-      .scaleLinear()
-      .domain([0, audioData.length - 1])
-      .range([margin.left, width - margin.right]);
 
     const yScale = d3
       .scaleLinear()
@@ -74,7 +68,16 @@ class Drawer {
       .attr("height", height)
       .attr("width", 0); // Початкова ширина — 0
 
-    const band = (width - margin.left - margin.right) / audioData.length;
+
+    const step = Math.floor(width / audioData.length);
+    
+    // Ширина стовпчика — це крок мінус місце під пробіл.
+    // Math.max гарантує, що стовпчик буде не тоншим за 1 піксель.
+    const barWidth = Math.max(1, Math.floor(step * 0.7)); 
+
+    // Рахуємо, скільки пікселів залишиться пустими, і ділимо на 2, щоб центрувати хвилю
+    const totalWaveWidth = step * audioData.length;
+    const offsetX = Math.floor((width - totalWaveWidth) / 2);
 
     // 1. СІРА ХВИЛЯ (Фон)
     const gBg = svg.append("g").attr("transform", `translate(0, ${height / 2})`);
@@ -83,11 +86,11 @@ class Drawer {
       .join("rect")
       .attr("fill", "#475569") // Сірий колір
       .attr("height", (d) => yScale(d))
-      .attr("width", () => band * padding)
-      .attr("x", (_, i) => xScale(i))
+      .attr("width", () => barWidth)
+      .attr("x", (_, i) => offsetX + (i * step))
       .attr("y", (d) => -yScale(d) / 2)
-      .attr("rx", band / 2)
-      .attr("ry", band / 2);
+      .attr("rx", barWidth / 2)
+      .attr("ry", barWidth / 2);
 
     // 2. ЗЕЛЕНА ХВИЛЯ (Програна частина)
     const gProgress = svg.append("g")
@@ -99,11 +102,11 @@ class Drawer {
       .join("rect")
       .attr("fill", "#03A300") // Зелений колір
       .attr("height", (d) => yScale(d))
-      .attr("width", () => band * padding)
-      .attr("x", (_, i) => xScale(i))
+      .attr("width", () => barWidth)
+      .attr("x", (_, i) => offsetX + (i * step))
       .attr("y", (d) => -yScale(d) / 2)
-      .attr("rx", band / 2)
-      .attr("ry", band / 2);
+      .attr("rx", barWidth / 2)
+      .attr("ry", barWidth / 2);
 
     return svg;
   }
