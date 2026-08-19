@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useRef, useLayoutEffect } from "react";
 import SoundDriver from "./SoundDriver";
+import { formatTime } from "../../utils/formatTime";
 
 export default function Player() {
   const soundController = useRef<SoundDriver | null>(null);
@@ -7,6 +8,8 @@ export default function Player() {
   const [loading, setLoading] = useState(false);
   const [hasFile, setHasFile] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   // 1. Універсальна функція обробки файлу
   const processAudioFile = useCallback(async (audioFile: File) => {
@@ -18,11 +21,23 @@ export default function Player() {
     setLoading(true);
     const soundInstance = new SoundDriver(audioFile);
 
+    soundInstance.onTimeUpdate = (current) => {
+      // Оновлюємо стан тільки якщо час змінився хоча б на секунду
+      // (щоб React не перемальовував сторінку 60 разів на секунду і не "лагав")
+      setCurrentTime((prev) =>
+        Math.floor(current) !== Math.floor(prev) ? current : prev,
+      );
+    };
+
     try {
       if (waveContainerRef.current) {
         // Метод init просто декодує звук, йому ширина контейнера ще не потрібна
         await soundInstance.init(waveContainerRef.current);
         soundController.current = soundInstance;
+
+        if (soundInstance.audioBuffer) {
+          setDuration(soundInstance.audioBuffer.duration);
+        }
 
         // Просто кажемо React, що файл готовий. Далі працюватиме useLayoutEffect!
         setHasFile(true);
@@ -181,6 +196,15 @@ export default function Player() {
             >
               Stop
             </button>
+
+            {/* індикатор часу */}
+            {duration > 0 ? (
+              <span className="text-gray-400 text-sm font-medium tracking-wide">
+                {formatTime(currentTime)} / {formatTime(duration)}
+              </span>
+            ) : (
+              <span className="text-gray-500 text-sm">Завантаження...</span>
+            )}
           </div>
 
           {/* Регулятор гучності */}

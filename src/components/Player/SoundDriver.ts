@@ -5,7 +5,7 @@ class SoundDriver {
   private drawer?: Drawer;
   private context: AudioContext;
   private gainNode?: GainNode = undefined;
-  private audioBuffer?: AudioBuffer = undefined;
+  public audioBuffer?: AudioBuffer = undefined;
   private bufferSource?: AudioBufferSourceNode = undefined;
   private startedAt = 0;
   private pausedAt = 0;
@@ -101,6 +101,10 @@ class SoundDriver {
       if (reset) {
         this.pausedAt = 0;
         this.drawer?.updateProgress(0); // 🔴 Скидаємо графік, якщо не грає
+
+        if (this.onTimeUpdate && this.audioBuffer) {
+          this.onTimeUpdate(0, this.audioBuffer.duration);
+        }
       }
       return;
     }
