@@ -10,6 +10,7 @@ class SoundDriver {
   private startedAt = 0;
   private pausedAt = 0;
   private isRunning = false;
+  private animationFrameId: number = 0;
 
   constructor(audioFile: Blob) {
     this.audioFile = audioFile;
@@ -83,6 +84,8 @@ class SoundDriver {
     this.pausedAt = 0;
     this.isRunning = true;
 
+    this.animateCursor();
+
     // Автоскидання, коли трек дограв сам до кінця
     this.bufferSource.onended = () => {
       if (this.context.currentTime - this.startedAt >= (this.audioBuffer?.duration || 0)) {
@@ -95,6 +98,7 @@ class SoundDriver {
     if (!this.bufferSource) {
       if (reset) {
         this.pausedAt = 0;
+        this.drawer?.updateProgress(0); // 🔴 Скидаємо графік, якщо не грає
       }
       return;
     }
@@ -105,8 +109,15 @@ class SoundDriver {
       this.bufferSource.disconnect();
       this.bufferSource = undefined;
       this.isRunning = false;
+      
+      cancelAnimationFrame(this.animationFrameId); // 🔴 4. Зупиняємо цикл
+
+      if (reset) {
+        this.drawer?.updateProgress(0); // 🔴 Скидаємо графік, якщо це повний Stop
+      }
     } else if (reset) {
       this.pausedAt = 0;
+      this.drawer?.updateProgress(0); // 🔴 Скидаємо графік
     }
   }
 
@@ -115,6 +126,25 @@ class SoundDriver {
       this.gainNode.gain.value = volume;
     }
   }
+
+  private animateCursor = () => {
+    if (!this.isRunning || !this.drawer || !this.audioBuffer) return;
+
+    // Рахуємо поточний час (з урахуванням пауз)
+    const currentTime = this.context.currentTime - this.startedAt;
+    const duration = this.audioBuffer.duration;
+
+    // Вираховуємо відсоток програвання
+    let percent = (currentTime / duration) * 100;
+    if (percent > 100) percent = 100;
+    if (percent < 0) percent = 0;
+
+    // Кажемо D3 оновити градієнт
+    this.drawer.updateProgress(percent);
+
+    // Запускаємо наступний кадр (виклик кожні ~16мс)
+    this.animationFrameId = requestAnimationFrame(this.animateCursor);
+  };
 
   public drawChart(): void {
     this.drawer?.init();
