@@ -12,6 +12,8 @@ class SoundDriver {
   private isRunning = false;
   private animationFrameId: number = 0;
 
+  public onTimeUpdate?: (currentTime: number, duration: number) => void;
+
   constructor(audioFile: Blob) {
     this.audioFile = audioFile;
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -161,6 +163,10 @@ class SoundDriver {
     // Рахуємо поточний час (з урахуванням пауз)
     const currentTime = this.context.currentTime - this.startedAt;
     const duration = this.audioBuffer.duration;
+
+    if (this.onTimeUpdate) {
+      this.onTimeUpdate(currentTime, duration);
+    }
 
     // Вираховуємо відсоток програвання
     let percent = (currentTime / duration) * 100;

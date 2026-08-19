@@ -21,28 +21,6 @@ class Drawer {
     this.onSeek = onSeek;
   }
 
-  private getTimeDomain() {
-    const step = 30; // 30 секунд
-    const steps = Math.ceil(this.buffer.duration / step);
-
-    return [...new Array(steps)].map((_, index) => {
-      const date = new Date(1970, 0, 1, 0, 0, 0, 0);
-      date.setSeconds(index * step);
-
-      let minutes = date.getMinutes().toString();
-      if (minutes.length === 1) {
-        minutes = `0${minutes}`;
-      }
-
-      let seconds = date.getSeconds().toString();
-      if (seconds.length === 1) {
-        seconds = `0${seconds}`;
-      }
-
-      return `${minutes}:${seconds}`;
-    });
-  }
-
   public generateWaveform(audioData: number[], options: IOptions = {}) {
     const {
       margin = { top: 0, bottom: 0, left: 0, right: 0 },
@@ -96,40 +74,6 @@ class Drawer {
       .attr("height", height)
       .attr("width", 0); // Початкова ширина — 0
 
-    // Малюємо сітку
-    svg
-      .append("g")
-      .attr("stroke-width", 0.5)
-      .attr("stroke", "#D6E5D6")
-      .call((g) =>
-        g
-          .append("g")
-          .selectAll("line")
-          .data(xScale.ticks())
-          .join("line")
-          .attr("x1", (d) => 0.5 + xScale(d))
-          .attr("x2", (d) => 0.5 + xScale(d))
-          .attr("y1", 0)
-          .attr("y2", this.parent.clientHeight),
-      )
-      .call((g) =>
-        g
-          .append("g")
-          .selectAll("line")
-          .data(yScale.ticks())
-          .join("line")
-          .attr("y1", (d) => yScale(d))
-          .attr("y2", (d) => yScale(d))
-          .attr("x1", 0)
-          .attr("x2", this.parent.clientWidth),
-      );
-
-    svg
-      .append("rect")
-      .attr("width", width)
-      .attr("height", height)
-      .attr("fill", "rgba(255, 255, 255, 0)");
-
     const band = (width - margin.left - margin.right) / audioData.length;
 
     // 1. СІРА ХВИЛЯ (Фон)
@@ -160,23 +104,6 @@ class Drawer {
       .attr("y", (d) => -yScale(d) / 2)
       .attr("rx", band / 2)
       .attr("ry", band / 2);
-
-    const bands = this.getTimeDomain();
-
-    const bandScale = d3
-      .scaleBand()
-      .domain(bands)
-      .range([margin.top, this.parent.clientWidth]);
-
-    // Додаємо вісь часу
-    svg
-      .append("g")
-      .call((g) => g.select(".domain").remove())
-      .attr("stroke-width", 0)
-      .style("color", "#95A17D")
-      .style("font-size", "11px")
-      .style("font-weight", 400)
-      .call(d3.axisBottom(bandScale));
 
     return svg;
   }
