@@ -13,9 +13,12 @@ class Drawer {
 
   private progressRect?: d3.Selection<SVGRectElement, undefined, null, undefined>;
 
-  constructor(buffer: AudioBuffer, parent: HTMLElement) {
+  private onSeek?: (percent: number) => void;
+
+  constructor(buffer: AudioBuffer, parent: HTMLElement, onSeek?: (percent: number) => void) {
     this.buffer = buffer;
     this.parent = parent;
+    this.onSeek = onSeek;
   }
 
   private getTimeDomain() {
@@ -65,7 +68,21 @@ class Drawer {
     svg
       .style("width", `${this.parent.clientWidth}px`)
       .style("height", `${this.parent.clientHeight}px`)
-      .style("display", "block");
+      .style("display", "block")
+      .style("cursor", "pointer")
+      .on("click", (event: MouseEvent) => {  
+        if(!this.onSeek) return;
+
+        const svgRect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
+
+        const clickX = event.clientX - svgRect.left;
+        let percent = (clickX / svgRect.width) * 100;
+
+        if (percent <  0) percent = 0;
+        if (percent > 100) percent = 100;
+        
+        this.onSeek(percent);
+      });
 
     // Створюємо обтравну маску (Clip Path)
     const defs = svg.append("defs");

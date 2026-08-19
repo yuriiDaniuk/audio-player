@@ -32,7 +32,7 @@ class SoundDriver {
         try {
           const buffer = await this.loadSound(event);
           this.audioBuffer = buffer;
-          this.drawer = new Drawer(buffer, parent);
+          this.drawer = new Drawer(buffer, parent, (percent: number) => this.seek(percent));
           resolve();
         } catch (err) {
           reject(err);
@@ -118,6 +118,34 @@ class SoundDriver {
     } else if (reset) {
       this.pausedAt = 0;
       this.drawer?.updateProgress(0); // 🔴 Скидаємо графік
+    }
+  }
+
+  public async seek(percent: number): Promise<void> {
+    if (!this.audioBuffer) return;
+
+    // Вираховуємо нову секунду старту
+    const duration = this.audioBuffer.duration;
+    const newTime = (percent / 100) * duration;
+
+    // Миттєво перемальовуємо графік для швидкого візуального відгуку
+    this.drawer?.updateProgress(percent);
+
+    if (this.isRunning) {
+      // Web Audio API не вміє "мотати" на льоту. 
+      // Нам треба зупинити поточний звук...
+      this.bufferSource?.stop();
+      this.bufferSource?.disconnect();
+      this.bufferSource = undefined;
+      this.isRunning = false;
+      cancelAnimationFrame(this.animationFrameId);
+
+      // ...змінити час старту і запустити знову!
+      this.pausedAt = newTime;
+      await this.play(); 
+    } else {
+      // Якщо музика стояла на паузі, просто запам'ятовуємо новий час
+      this.pausedAt = newTime;
     }
   }
 
