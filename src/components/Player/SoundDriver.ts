@@ -119,11 +119,17 @@ class SoundDriver {
       cancelAnimationFrame(this.animationFrameId); // 🔴 4. Зупиняємо цикл
 
       if (reset) {
+        if (this.onTimeUpdate && this.audioBuffer) {
+          this.onTimeUpdate(0, this.audioBuffer.duration);
+        }
         this.drawer?.updateProgress(0); // 🔴 Скидаємо графік, якщо це повний Stop
       }
     } else if (reset) {
       this.pausedAt = 0;
       this.drawer?.updateProgress(0); // 🔴 Скидаємо графік
+      if (this.onTimeUpdate && this.audioBuffer) {
+          this.onTimeUpdate(0, this.audioBuffer.duration);
+        }
     }
   }
 
@@ -136,6 +142,10 @@ class SoundDriver {
 
     // Миттєво перемальовуємо графік для швидкого візуального відгуку
     this.drawer?.updateProgress(percent);
+
+    if (this.onTimeUpdate) {
+      this.onTimeUpdate(newTime, duration);
+    }
 
     if (this.isRunning) {
       // Web Audio API не вміє "мотати" на льоту. 

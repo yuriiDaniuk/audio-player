@@ -21,12 +21,16 @@ export default function Player() {
     setLoading(true);
     const soundInstance = new SoundDriver(audioFile);
 
-    soundInstance.onTimeUpdate = (current) => {
-      // Оновлюємо стан тільки якщо час змінився хоча б на секунду
-      // (щоб React не перемальовував сторінку 60 разів на секунду і не "лагав")
-      setCurrentTime((prev) =>
-        Math.floor(current) !== Math.floor(prev) ? current : prev,
-      );
+    soundInstance.onTimeUpdate = (current, total) => {
+      setCurrentTime((prev) => {
+        // 🔴 Якщо це жорстке скидання на нуль (натиснули Stop) — завжди оновлюємо інтерфейс!
+        if (current === 0) return 0;
+
+        // Інакше — використовуємо звичайну оптимізацію
+        return Math.floor(current) !== Math.floor(prev) ? current : prev;
+      });
+
+      setDuration(total);
     };
 
     try {
