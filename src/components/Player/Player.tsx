@@ -5,37 +5,48 @@ import { formatTime } from "../../utils/formatTime";
 export default function Player() {
   const soundController = useRef<SoundDriver | null>(null);
   const waveContainerRef = useRef<HTMLDivElement | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [hasFile, setHasFile] = useState(false);
+  const [fileKey, setFileKey] = useState<number>(0);
+  const [fileName, setFileName] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // 1. Універсальна функція обробки файлу
+  // Спеціальний лічильник для стабільної обробки drag & drop над дочірніми елементами
+  const dragCounter = useRef(0);
+
+  // 1. Універсальна функція обробки аудіофайлу
   const processAudioFile = useCallback(async (audioFile: File) => {
     if (!audioFile.type.includes("audio")) {
-      alert("Будь ласка, оберіть аудіофайл");
+      alert("Будь ласка, оберіть коректний аудіофайл");
       return;
     }
 
+    // 🔴 Очищення пам'яті: зупиняємо попередній трек перед стартом нового
+    if (soundController.current) {
+      soundController.current.pause(true);
+      soundController.current = null;
+    }
+
     setLoading(true);
+    setFileName(audioFile.name);
+    setCurrentTime(0);
+    setHasFile(false);
+
     const soundInstance = new SoundDriver(audioFile);
 
     soundInstance.onTimeUpdate = (current, total) => {
       setCurrentTime((prev) => {
-        // 🔴 Якщо це жорстке скидання на нуль (натиснули Stop) — завжди оновлюємо інтерфейс!
         if (current === 0) return 0;
-
-        // Інакше — використовуємо звичайну оптимізацію
         return Math.floor(current) !== Math.floor(prev) ? current : prev;
       });
-
       setDuration(total);
     };
 
     try {
       if (waveContainerRef.current) {
-        // Метод init просто декодує звук, йому ширина контейнера ще не потрібна
         await soundInstance.init(waveContainerRef.current);
         soundController.current = soundInstance;
 
@@ -43,7 +54,7 @@ export default function Player() {
           setDuration(soundInstance.audioBuffer.duration);
         }
 
-        // Просто кажемо React, що файл готовий. Далі працюватиме useLayoutEffect!
+        setFileKey(Date.now()); // 🔴 ДОДАЙ ЦЕ СЮДИ: Тепер ключ оновлюється ВЧАСНО
         setHasFile(true);
       }
     } catch (err) {
@@ -54,46 +65,61 @@ export default function Player() {
   }, []);
 
   useLayoutEffect(() => {
-    // Цей код виконається СИНХРОННО відразу після того, як React змінить DOM
-    // (тобто контейнер отримає клас block і свою реальну ширину),
-    // але ДО того, як браузер встигне намалювати це на екрані.
     if (hasFile && waveContainerRef.current && soundController.current) {
+      // 🔴 1. Жорстко очищаємо контейнер від старого SVG-графіка
+      waveContainerRef.current.innerHTML = "";
+      
+      // 🔴 2. Тільки після цього малюємо новий
       soundController.current.drawChart();
     }
-  }, [hasFile]); // Запускаємо ефект тільки тоді, коли змінюється стейт hasFile
+  }, [hasFile, fileKey]); // Перемальовуємо при зміні файлу
 
-  // 2. Обробник для звичайного кліку по кнопці (замість старого uploadAudio)
+  // Обробник вибору через клік по кнопці (Input)
   const handleInputUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
       if (files && files.length > 0) {
-        processAudioFile(files[0]); // Передаємо файл в універсальну функцію
+        processAudioFile(files[0]);
       }
+      event.target.value = ""; // Очищаємо інпут для можливості вибрати той самий файл повторно
     },
     [processAudioFile],
   );
 
-  // Обробник: коли файл "завис" над контейнером
-  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); // Обов'язково! Інакше браузер просто відкриє файл на новій вкладці
-    setIsDragging(true);
+  // Обробники глобального Drag & Drop
+  const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
   }, []);
 
-  // Обробник: коли мишка з файлом вийшла за межі контейнера
   const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    setIsDragging(false);
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
   }, []);
 
-  // Обробник: коли користувач відпустив кнопку миші (кинув файл)
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
   const handleDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
-      setIsDragging(false); // Вимикаємо підсвітку
+      e.stopPropagation();
+      setIsDragging(false);
+      dragCounter.current = 0;
 
-      const files = e.dataTransfer.files; // Дістаємо файли з події Drag & Drop
+      const files = e.dataTransfer.files;
       if (files && files.length > 0) {
-        processAudioFile(files[0]); // Віддаємо файл у нашу готову функцію!
+        processAudioFile(files[0]);
       }
     },
     [processAudioFile],
@@ -120,47 +146,64 @@ export default function Player() {
   );
 
   return (
-    <div className="w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col gap-6 text-slate-100">
-      {/* Секція завантаження файлу */}
-      {!hasFile && (
-        <div
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          className={`
-      flex flex-col items-center justify-center w-full h-64 
-      border-2 border-dashed rounded-xl transition-all duration-200 ease-in-out
-      ${
-        isDragging
-          ? "border-green-500 bg-green-50/50 scale-[1.02]"
-          : "border-gray-300 bg-gray-50 hover:bg-gray-100"
-      }
-    `}
-        >
-          <div className="text-center pointer-events-none">
-            <p className="text-lg font-medium text-gray-600 mb-2">
-              {isDragging ? "Кидайте файл сюди!" : "Перетягніть аудіофайл сюди"}
-            </p>
-            <p className="text-sm text-gray-400">або</p>
+    <div
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      className="relative w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl flex flex-col gap-6 text-slate-100 overflow-hidden"
+    >
+      {/* 🚀 Глобальний оверлей (Варіант А): показується при перетягуванні над плеєром */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 bg-slate-950/85 backdrop-blur-sm border-2 border-dashed border-sky-400 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all pointer-events-none">
+          <div className="w-14 h-14 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center text-2xl font-bold">
+            ⬇
           </div>
-
-          {/* Наш оновлений інпут для вибору файлу кліком */}
-          <label className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg cursor-pointer hover:bg-green-700 transition-colors">
-            Оберіть файл на комп'ютері
-            <input
-              type="file"
-              accept="audio/*"
-              className="hidden"
-              onChange={handleInputUpload}
-            />
-          </label>
+          <p className="text-lg font-semibold text-sky-200">
+            Відпустіть аудіофайл, щоб завантажити
+          </p>
         </div>
       )}
 
-      {/* Індикатор завантаження */}
+      {/* 📱 Верхня панель (Хедер): завжди доступна кнопка + назва треку */}
+      <div className="flex items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
+        <div className="flex flex-col min-w-0">
+          <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+            Аудіоплеєр
+          </span>
+          <span className="text-sm font-medium text-slate-200 truncate max-w-[200px] sm:max-w-md">
+            {fileName || "Трек не обрано"}
+          </span>
+        </div>
+
+        {/* Кнопка вибору файлу кліком (на мобільних — основний спосіб) */}
+        <label className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-sm font-medium rounded-lg cursor-pointer transition border border-slate-700/60 shadow-sm shrink-0">
+          <span>{hasFile ? "Замінити трек" : "Обрати трек"}</span>
+          <input
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={handleInputUpload}
+          />
+        </label>
+      </div>
+
+      {/* Стартовий блок, якщо файл ще не обрано взагалі */}
+      {!hasFile && !loading && (
+        <div className="flex flex-col items-center justify-center w-full h-48 border border-dashed border-slate-700/60 rounded-xl bg-slate-950/40 text-center p-6">
+          <p className="text-base text-slate-300 font-medium mb-1">
+            Перетягніть аудіофайл сюди
+          </p>
+          <p className="text-xs text-slate-400">
+            або скористайтеся кнопкою «Обрати трек» зверху
+          </p>
+        </div>
+      )}
+
+      {/* Індикатор завантаження / декодування */}
       {loading && (
-        <div className="text-center py-8 text-sky-400 font-medium animate-pulse">
-          Декодування та обробка треку...
+        <div className="w-full h-48 flex items-center justify-center text-sky-400 font-medium animate-pulse bg-slate-950/40 rounded-xl border border-slate-800">
+          Декодування та побудова хвилі...
         </div>
       )}
 
@@ -169,18 +212,18 @@ export default function Player() {
         ref={waveContainerRef}
         id="waveContainer"
         className={`w-full h-48 bg-slate-950/70 border border-slate-800/80 rounded-xl overflow-hidden ${
-          !hasFile ? "hidden" : "block"
+          !hasFile || loading ? "hidden" : "block"
         }`}
       />
 
-      {/* Панель керування */}
+      {/* Нижня панель керування */}
       {!loading && hasFile && (
-        <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-800">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-800/80">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={togglePlayer("play")}
-              className="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold rounded-lg transition active:scale-95"
+              className="px-5 py-2 bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold rounded-lg transition active:scale-95 shadow-md shadow-sky-500/20"
             >
               Play
             </button>
@@ -201,14 +244,10 @@ export default function Player() {
               Stop
             </button>
 
-            {/* індикатор часу */}
-            {duration > 0 ? (
-              <span className="text-gray-400 text-sm font-medium tracking-wide">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
-            ) : (
-              <span className="text-gray-500 text-sm">Завантаження...</span>
-            )}
+            {/* Індикатор часу */}
+            <span className="text-slate-400 text-sm font-medium tracking-wide ml-2">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
           </div>
 
           {/* Регулятор гучності */}
